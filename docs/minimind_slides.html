@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniMind Model Code Slides</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .slide {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            padding: 40px;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.5s ease-in-out;
+            overflow-y: auto;
+        }
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+            z-index: 10;
+        }
+        .slide.prev {
+            opacity: 0;
+            transform: translateX(-100%);
+            z-index: 5;
+        }
+        .slide-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        h2 {
+            font-size: 2em;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        h3 {
+            font-size: 1.5em;
+            color: #3498db;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            border-left: 4px solid #3498db;
+        }
+        .nav {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        .nav button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        .nav button:hover {
+            background-color: #2980b9;
+            transform: scale(1.05);
+        }
+        .nav button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .slide-number {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            z-index: 100;
+        }
+        @media (max-width: 768px) {
+            .slide {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 2em;
+            }
+            h2 {
+                font-size: 1.7em;
+            }
+            h3 {
+                font-size: 1.3em;
+            }
+            .nav button {
+                padding: 10px 20px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="slide1" class="slide active">
+        <div class="slide-content">
+            <h1>MiniMind Model</h1>
+            <p>A lightweight LLM implementation based on transformer architecture</p>
+            <p>Designed for efficiency and educational purposes</p>
+        </div>
+    </div>
+    
+    <div id="slide2" class="slide">
+        <div class="slide-content">
+            <h2>Model Configuration</h2>
+            <h3>MiniMindConfig Class</h3>
+            <p>Configuration class defining model hyperparameters</p>
+            <pre><code>class MiniMindConfig(PretrainedConfig):
+    model_type = "minimind"
+    def __init__(self, hidden_size=768, num_hidden_layers=8, use_moe=False, **kwargs):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.use_moe = use_moe
+        # ... other configurations</code></pre>
+            <p>Key parameters:</p>
+            <ul>
+                <li>hidden_size: 模型隐藏层维度 (default: 768)</li>
+                <li>num_hidden_layers: Transformer块数量 (default: 8)</li>
+                <li>use_moe: 是否使用混合专家模式</li>
+                <li>支持YaRN rope scaling for extended context</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="slide3" class="slide">
+        <div class="slide-content">
+            <h2>Core Components</h2>
+            <h3>Attention Mechanism</h3>
+            <p>Multi-head attention with optimizations</p>
+            <pre><code>class Attention(nn.Module):
+    def __init__(self, config: MiniMindConfig):
+        super().__init__()
+        self.num_key_value_heads = config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        self.n_local_heads = config.num_attention_heads
+        self.n_local_kv_heads = self.num_key_value_heads
+        self.n_rep = self.n_local_heads // self.n_local_kv_heads
+        self.head_dim = config.head_dim
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention') and config.flash_attn</code></pre>
+            <p>Features:</p>
+            <ul>
+                <li>支持GQA (Grouped Query Attention)</li>
+                <li>Flash Attention优化</li>
+                <li>旋转位置编码 (RoPE)</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="slide4" class="slide">
+        <div class="slide-content">
+            <h2>Feed Forward Networks</h2>
+            <h3>Standard FFN</h3>
+            <pre><code>class FeedForward(nn.Module):
+    def __init__(self, config: MiniMindConfig, intermediate_size: int = None):
+        super().__init__()
+        intermediate_size = intermediate_size or config.intermediate_size
+        self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+    
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))</code></pre>
+            <h3>Mixture of Experts (MoE) FFN</h3>
+            <pre><code>class MOEFeedForward(nn.Module):
+    def __init__(self, config: MiniMindConfig):
+        super().__init__()
+        self.config = config
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.experts = nn.ModuleList([
+            FeedForward(config, intermediate_size=config.moe_intermediate_size) 
+            for _ in range(config.num_experts)
+        ])
+    
+    def forward(self, x):
+        # Routing logic with top-k expert selection
+        # ... implementation details</code></pre>
+        </div>
+    </div>
+    
+    <div id="slide5" class="slide">
+        <div class="slide-content">
+            <h2>Transformer Block</h2>
+            <h3>MiniMindBlock</h3>
+            <p>Standard transformer block with pre-normalization</p>
+            <pre><code>class MiniMindBlock(nn.Module):
+    def __init__(self, layer_id: int, config: MiniMindConfig):
+        super().__init__()
+        self.self_attn = Attention(config)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = FeedForward(config) if not config.use_moe else MOEFeedForward(config)
+    
+    def forward(self, hidden_states, position_embeddings, past_key_value=None, use_cache=False, attention_mask=None):
+        residual = hidden_states
+        hidden_states, present_key_value = self.self_attn(
+            self.input_layernorm(hidden_states), position_embeddings,
+            past_key_value, use_cache, attention_mask
+        )
+        hidden_states += residual
+        hidden_states = hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
+        return hidden_states, present_key_value</code></pre>
+            <p>Architecture:</p>
+            <ul>
+                <li>Pre-normalization (Input LayerNorm + Post Attention LayerNorm)</li>
+                <li>Self-attention module</li>
+                <li>Feed-forward network (standard or MoE)</li>
+                <li>Residual connections</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="slide6" class="slide">
+        <div class="slide-content">
+            <h2>Model Architecture</h2>
+            <h3>MiniMindModel</h3>
+            <p>Main model class combining embeddings and transformer blocks</p>
+            <pre><code>class MiniMindModel(nn.Module):
+    def __init__(self, config: MiniMindConfig):
+        super().__init__()
+        self.config = config
+        self.vocab_size, self.num_hidden_layers = config.vocab_size, config.num_hidden_layers
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.dropout)
+        self.layers = nn.ModuleList([
+            MiniMindBlock(l, config) for l in range(self.num_hidden_layers)
+        ])
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # Precompute rotary positional embeddings
+        freqs_cos, freqs_sin = precompute_freqs_cis(
+            dim=config.head_dim, 
+            end=config.max_position_embeddings, 
+            rope_base=config.rope_theta, 
+            rope_scaling=config.rope_scaling
+        )
+        self.register_buffer("freqs_cos", freqs_cos, persistent=False)
+        self.register_buffer("freqs_sin", freqs_sin, persistent=False)</code></pre>
+        </div>
+    </div>
+    
+    <div id="slide7" class="slide">
+        <div class="slide-content">
+            <h2>Language Model Head</h2>
+            <h3>MiniMindForCausalLM</h3>
+            <p>Complete model for causal language modeling</p>
+            <pre><code>class MiniMindForCausalLM(PreTrainedModel, GenerationMixin):
+    config_class = MiniMindConfig
+    def __init__(self, config: MiniMindConfig = None):
+        self.config = config or MiniMindConfig()
+        super().__init__(self.config)
+        self.model = MiniMindModel(self.config)
+        self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
+        # Weight tying
+        self.model.embed_tokens.weight = self.lm_head.weight
+    
+    def forward(self, input_ids, attention_mask=None, past_key_values=None, use_cache=False, logits_to_keep=0, labels=None, **kwargs):
+        # Forward pass through model
+        hidden_states, past_key_values, aux_loss = self.model(
+            input_ids, attention_mask, past_key_values, use_cache, **kwargs
+        )
+        # Language modeling head
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Compute loss if labels provided
+        # ... loss computation</code></pre>
+            <p>Features:</p>
+            <ul>
+                <li>权重共享 (Weight Tying) between embeddings and output layer</li>
+                <li>支持辅助损失 (Auxiliary Loss) for MoE load balancing</li>
+                <li>与Hugging Face Transformers兼容</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="slide8" class="slide">
+        <div class="slide-content">
+            <h2>Generation Capabilities</h2>
+            <h3>Efficient Text Generation</h3>
+            <pre><code>@torch.inference_mode()
+def generate(self, inputs=None, attention_mask=None, max_new_tokens=8192, temperature=0.85, top_p=0.85, top_k=50, eos_token_id=2, streamer=None, use_cache=True, num_return_sequences=1, do_sample=True, repetition_penalty=1.0, **kwargs):
+    # Implementation details...
+    for _ in range(max_new_tokens):
+        # Forward pass with KV caching
+        outputs = self.forward(...)
+        # Apply temperature, top-p, top-k filtering
+        # Sample or argmax next token
+        # Update finished sequences
+    return input_ids</code></pre>
+            <p>Generation Features:</p>
+            <ul>
+                <li>KV缓存加速推理</li>
+                <li>温度采样、top-p、top-k过滤</li>
+                <li>重复惩罚防止重复生成</li>
+                <li>流式输出支持</li>
+                <li>支持长达8192 tokens的生成</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="slide9" class="slide">
+        <div class="slide-content">
+            <h2>Key Innovations</h2>
+            <ul>
+                <li><strong>混合专家模式 (MoE)</strong>: 可选的专家路由机制提高模型容量</li>
+                <li><strong>Grouped Query Attention (GQA)</strong>: 减少KV头数量以降低内存使用</li>
+                <li><strong>YaRN RoPE Scaling</strong>: 扩展上下文窗口至32K而不需要重新训练</li>
+                <li><strong>Flash Attention 支持</strong>: 当可用时使用高效的注意力实现</li>
+                <li><strong>轻量级设计</strong>: 从小规模模型开始，易于理解和修改</li>
+            </ul>
+            <p>模型旨在提供一个清晰、高效的LLM实现，适用于研究和教育目的。</p>
+        </div>
+    </div>
+    
+    <div id="slide10" class="slide">
+        <div class="slide-content">
+            <h2>使用示例</h2>
+            <h3>快速开始</h3>
+            <pre><code># 初始化模型
+from model import MiniMindForCausalLM, MiniMindConfig
+
+config = MiniMindConfig(
+    hidden_size=512,
+    num_hidden_layers=6,
+    use_moe=False
+)
+model = MiniMindForCausalLM(config)
+
+# 生成文本
+input_ids = tokenizer.encode("你好，世界！", return_tensors="pt")
+generated_ids = model.generate(
+    input_ids,
+    max_new_tokens=50,
+    temperature=0.8,
+    top_p=0.9
+)
+output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+print(output)</code></pre>
+            <p>更多详情请参考 <code>README.md</code> 和示例脚本。</p>
+        </div>
+    </div>
+    
+    <div class="nav">
+        <button id="prevBtn" disabled>上一页</button>
+        <button id="nextBtn">下一页</button>
+    </div>
+    <div class="slide-number">1/10</div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const slideNumber = document.querySelector('.slide-number');
+        let currentSlide = 0;
+
+        function updateSlide() {
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active', 'prev');
+                if (index === currentSlide) {
+                    slide.classList.add('active');
+                } else if (index < currentSlide) {
+                    slide.classList.add('prev');
+                }
+            });
+            prevBtn.disabled = currentSlide === 0;
+            nextBtn.disabled = currentSlide === slides.length - 1;
+            slideNumber.textContent = `${currentSlide + 1}/${slides.length}`;
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlide();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                updateSlide();
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' && currentSlide > 0) {
+                currentSlide--;
+                updateSlide();
+            } else if (e.key === 'ArrowRight' && currentSlide < slides.length - 1) {
+                currentSlide++;
+                updateSlide();
+            }
+        });
+
+        // Initialize
+        updateSlide();
+    </script>
+</body>
+</html>
